@@ -1,0 +1,93 @@
+{
+  "name": "ts-deep-explorer",
+  "displayName": "TS Deep Explorer",
+  "description": "Interactive TypeScript dependency graph with documentation overlays",
+  "version": "0.1.0",
+  "publisher": "danielperezr88",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Visualization"
+  ],
+  "keywords": [
+    "typescript",
+    "dependency graph",
+    "visualization",
+    "documentation"
+  ],
+  "activationEvents": [
+    "onLanguage:typescript",
+    "onLanguage:typescriptreact"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "tsDeepExplorer.helloWorld",
+        "title": "TS Deep Explorer: Hello World"
+      },
+      {
+        "command": "tsDeepExplorer.openExplorer",
+        "title": "TS Deep Explorer: Open Explorer"
+      },
+      {
+        "command": "tsDeepExplorer.analyzeFile",
+        "title": "TS Deep Explorer: Analyze Current File"
+      },
+      {
+        "command": "tsDeepExplorer.showCycles",
+        "title": "TS Deep Explorer: Show Circular Dependencies"
+      },
+      {
+        "command": "tsDeepExplorer.exportGraph",
+        "title": "TS Deep Explorer: Export Graph"
+      }
+    ],
+    "configuration": {
+      "title": "TS Deep Explorer",
+      "properties": {
+        "tsDeepExplorer.exclude": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": ["**/node_modules/**", "**/*.d.ts", "**/dist/**", "**/out/**"],
+          "description": "Glob patterns to exclude from analysis"
+        },
+        "tsDeepExplorer.layout": {
+          "type": "string",
+          "enum": ["TB", "LR"],
+          "default": "LR",
+          "description": "Default graph layout direction (TB=top-bottom, LR=left-right)"
+        },
+        "tsDeepExplorer.autoRefresh": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically refresh graph on file save"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.config.mjs",
+    "watch": "node esbuild.config.mjs --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "tsc --noEmit",
+    "package": "node esbuild.config.mjs --production"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@types/node": "^20.11.0",
+    "typescript": "^5.4.0",
+    "esbuild": "^0.20.0",
+    "vitest": "^1.3.0"
+  },
+  "dependencies": {
+    "@dagrejs/dagre": "^1.1.0",
+    "@xyflow/react": "^12.0.0",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0"
+  }
+}
