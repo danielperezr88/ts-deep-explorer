@@ -23,6 +23,7 @@ export interface ExportedSymbol {
   kind: "function" | "class" | "interface" | "type" | "const" | "enum";
   doc: string | null;
   deprecated: boolean;
+  deprecationMessage?: string;
   signature: string;
   usedBy: string[];
 }
