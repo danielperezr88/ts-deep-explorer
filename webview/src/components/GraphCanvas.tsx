@@ -13,6 +13,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { ModuleNode } from "./nodes/ModuleNode";
+import { GroupNode, type GroupNodeData } from "./nodes/GroupNode";
 import { DependencyEdge } from "./edges/DependencyEdge";
 import { DocPanel } from "./panels/DocPanel";
 import { FilterPanel, DEFAULT_FILTER, type FilterState } from "./panels/FilterPanel";
@@ -22,6 +23,7 @@ import type { GraphNodeData, ModuleClassification } from "../../../shared/protoc
 
 const nodeTypes: NodeTypes = {
   module: ModuleNode,
+  group: GroupNode,
 };
 
 const edgeTypes: EdgeTypes = {
@@ -47,20 +49,81 @@ export function GraphCanvas() {
   const state = useExtensionHost();
   const [selectedNode, setSelectedNode] = useState<GraphNodeData | null>(null);
   const [filter, setFilter] = useState<FilterState>(DEFAULT_FILTER);
+  const [collapsedDirs, setCollapsedDirs] = useState<Set<string>>(new Set());
+
+  const toggleDirectory = useCallback((dir: string) => {
+    setCollapsedDirs((prev) => {
+      const next = new Set(prev);
+      if (next.has(dir)) {
+        next.delete(dir);
+      } else {
+        next.add(dir);
+      }
+      return next;
+    });
+  }, []);
 
   const flowNodes: Node[] = useMemo(() => {
-    return state.nodes.map((n) => {
-      const pos = state.positions.get(n.id);
-      const match = matchesFilter(n, filter);
-      return {
-        id: n.id,
-        type: "module",
-        position: pos ? { x: pos.x, y: pos.y } : { x: 0, y: 0 },
-        data: n,
+    // Group nodes by directory for collapsed directories
+    const collapsedNodeIds = new Set<string>();
+    const groupNodes: Node[] = [];
+
+    // Find which directories are collapsed and collect their node IDs
+    for (const dir of collapsedDirs) {
+      const dirNodes = state.nodes.filter((n) => n.directory === dir);
+      if (dirNodes.length === 0) continue;
+
+      dirNodes.forEach((n) => collapsedNodeIds.add(n.id));
+
+      const classCounts: Record<string, number> = {};
+      let totalExports = 0;
+      let sumX = 0;
+      let sumY = 0;
+
+      for (const n of dirNodes) {
+        classCounts[n.classification] = (classCounts[n.classification] || 0) + 1;
+        totalExports += n.exports.length;
+        const pos = state.positions.get(n.id);
+        if (pos) {
+          sumX += pos.x;
+          sumY += pos.y;
+        }
+      }
+
+      const match = dirNodes.some((n) => matchesFilter(n, filter));
+
+      groupNodes.push({
+        id: `group:${dir}`,
+        type: "group",
+        position: { x: sumX / dirNodes.length, y: sumY / dirNodes.length },
+        data: {
+          directory: dir,
+          moduleCount: dirNodes.length,
+          classificationCounts: classCounts,
+          totalExports,
+          isCollapsed: true,
+        } as GroupNodeData,
         style: { opacity: match ? 1 : 0.15 },
-      };
-    });
-  }, [state.nodes, state.positions, filter]);
+      });
+    }
+
+    // Individual nodes (not collapsed)
+    const individualNodes = state.nodes
+      .filter((n) => !collapsedNodeIds.has(n.id))
+      .map((n) => {
+        const pos = state.positions.get(n.id);
+        const match = matchesFilter(n, filter);
+        return {
+          id: n.id,
+          type: "module",
+          position: pos ? { x: pos.x, y: pos.y } : { x: 0, y: 0 },
+          data: n,
+          style: { opacity: match ? 1 : 0.15 },
+        };
+      });
+
+    return [...individualNodes, ...groupNodes];
+  }, [state.nodes, state.positions, filter, collapsedDirs]);
 
   const matchedNodeIds = useMemo(() => {
     return new Set(
@@ -69,21 +132,60 @@ export function GraphCanvas() {
   }, [state.nodes, filter]);
 
   const flowEdges: Edge[] = useMemo(() => {
-    return state.edges.map((e) => ({
-      id: `${e.source}-${e.target}`,
+    // Map node IDs to their collapsed group ID if applicable
+    const nodeToGroup = new Map<string, string>();
+    for (const dir of collapsedDirs) {
+      const groupId = `group:${dir}`;
+      for (const n of state.nodes) {
+        if (n.directory === dir) {
+          nodeToGroup.set(n.id, groupId);
+        }
+      }
+    }
+
+    const edgeMap = new Map<string, { source: string; target: string; importType: string; symbols: string[] }>();
+
+    for (const e of state.edges) {
+      const sourceId = nodeToGroup.get(e.source) ?? e.source;
+      const targetId = nodeToGroup.get(e.target) ?? e.target;
+
+      // Skip self-edges (both endpoints collapsed into same group)
+      if (sourceId === targetId) continue;
+
+      // Deduplicate edges between same source/target
+      const key = `${sourceId}->${targetId}`;
+      const existing = edgeMap.get(key);
+      if (!existing) {
+        edgeMap.set(key, { source: sourceId, target: targetId, importType: e.importType, symbols: [...e.symbols] });
+      } else {
+        // Merge symbols
+        for (const s of e.symbols) {
+          if (!existing.symbols.includes(s)) existing.symbols.push(s);
+        }
+      }
+    }
+
+    return Array.from(edgeMap.entries()).map(([key, e]) => ({
+      id: key,
       type: "dependency",
       source: e.source,
       target: e.target,
       data: { importType: e.importType, symbols: e.symbols },
       style: {
-        opacity: matchedNodeIds.has(e.source) && matchedNodeIds.has(e.target) ? 1 : 0.1,
+        opacity: matchedNodeIds.has(state.edges.find((se) => se.source === e.source || se.target === e.target)?.source ?? "") ? 1 : 0.5,
       },
     }));
-  }, [state.edges, matchedNodeIds]);
+  }, [state.edges, matchedNodeIds, collapsedDirs, state.nodes]);
 
   const handleNodeClick: OnNodeClick = useCallback((_event, node) => {
+    // If clicking a group node, toggle its collapsed state
+    if (node.type === "group") {
+      const groupData = node.data as unknown as GroupNodeData;
+      toggleDirectory(groupData.directory);
+      return;
+    }
     setSelectedNode(node.data as unknown as GraphNodeData);
-  }, []);
+  }, [toggleDirectory]);
 
   const handleNodeDoubleClick: OnNodeDoubleClick = useCallback((_event, node) => {
     const data = node.data as unknown as GraphNodeData;
