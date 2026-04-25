@@ -50,6 +50,19 @@ export function GraphCanvas() {
   const [selectedNode, setSelectedNode] = useState<GraphNodeData | null>(null);
   const [filter, setFilter] = useState<FilterState>(DEFAULT_FILTER);
   const [collapsedDirs, setCollapsedDirs] = useState<Set<string>>(new Set());
+  const [showCycles, setShowCycles] = useState(false);
+
+  // Compute cycle edge set for highlighting
+  const cycleEdgeKeys = useMemo(() => {
+    if (!showCycles || state.cycles.length === 0) return new Set<string>();
+    const keys = new Set<string>();
+    for (const cycle of state.cycles) {
+      for (let i = 0; i < cycle.length - 1; i++) {
+        keys.add(`${cycle[i]}->${cycle[i + 1]}`);
+      }
+    }
+    return keys;
+  }, [showCycles, state.cycles]);
 
   const toggleDirectory = useCallback((dir: string) => {
     setCollapsedDirs((prev) => {
@@ -165,16 +178,34 @@ export function GraphCanvas() {
       }
     }
 
-    return Array.from(edgeMap.entries()).map(([key, e]) => ({
-      id: key,
-      type: "dependency",
-      source: e.source,
-      target: e.target,
-      data: { importType: e.importType, symbols: e.symbols },
-      style: {
-        opacity: matchedNodeIds.has(state.edges.find((se) => se.source === e.source || se.target === e.target)?.source ?? "") ? 1 : 0.5,
-      },
-    }));
+    return Array.from(edgeMap.entries()).map(([key, e]) => {
+      // Check if any original edge in this aggregated edge is part of a cycle
+      const isCycleEdge = cycleEdgeKeys.size > 0 && state.edges.some(
+        (se) => {
+          const mappedSource = nodeToGroup.get(se.source) ?? se.source;
+          const mappedTarget = nodeToGroup.get(se.target) ?? se.target;
+          return mappedSource === e.source && mappedTarget === e.target &&
+            (cycleEdgeKeys.has(`${se.source}->${se.target}`));
+        }
+      );
+
+      return {
+        id: key,
+        type: "dependency",
+        source: e.source,
+        target: e.target,
+        data: { importType: e.importType, symbols: e.symbols },
+        style: {
+          opacity: matchedNodeIds.has(state.edges.find((se) =>
+            (nodeToGroup.get(se.source) ?? se.source) === e.source ||
+            (nodeToGroup.get(se.target) ?? se.target) === e.target
+          )?.source ?? "") ? 1 : 0.5,
+          stroke: isCycleEdge ? "#f44336" : undefined,
+          strokeWidth: isCycleEdge ? 3 : undefined,
+        },
+        animated: isCycleEdge,
+      };
+    });
   }, [state.edges, matchedNodeIds, collapsedDirs, state.nodes]);
 
   const handleNodeClick: OnNodeClick = useCallback((_event, node) => {
@@ -199,6 +230,31 @@ export function GraphCanvas() {
   return (
     <div style={{ width: "100vw", height: "100vh", position: "relative" }}>
       <FilterPanel filter={filter} onFilterChange={setFilter} />
+      {state.cycles.length > 0 && (
+        <button
+          onClick={() => setShowCycles(!showCycles)}
+          style={{
+            position: "absolute",
+            top: "8px",
+            left: "280px",
+            zIndex: 5,
+            background: showCycles
+              ? "rgba(244, 67, 54, 0.2)"
+              : "var(--vscode-editor-background, #1e1e1e)",
+            border: showCycles
+              ? "1px solid rgba(244, 67, 54, 0.5)"
+              : "1px solid var(--vscode-editorWidget-border, #444)",
+            color: showCycles ? "#f44336" : "var(--vscode-editor-foreground, #ccc)",
+            padding: "4px 8px",
+            borderRadius: "3px",
+            cursor: "pointer",
+            fontSize: "11px",
+            fontFamily: "var(--vscode-editor-font-family, monospace)",
+          }}
+        >
+          {showCycles ? "Hide Cycles" : `${state.cycles.length} Cycle${state.cycles.length !== 1 ? "s" : ""}`}
+        </button>
+      )}
       <ReactFlow
         nodes={flowNodes}
         edges={flowEdges}
