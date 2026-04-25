@@ -14,9 +14,10 @@ import "@xyflow/react/dist/style.css";
 import { ModuleNode } from "./nodes/ModuleNode";
 import { DependencyEdge } from "./edges/DependencyEdge";
 import { DocPanel } from "./panels/DocPanel";
+import { FilterPanel, DEFAULT_FILTER, type FilterState } from "./panels/FilterPanel";
 import { useExtensionHost } from "../hooks/useExtensionHost";
 import { postMessageToHost } from "../lib/vscode-api";
-import type { GraphNodeData } from "../../../shared/protocol";
+import type { GraphNodeData, ModuleClassification } from "../../../shared/protocol";
 
 const nodeTypes: NodeTypes = {
   module: ModuleNode,
@@ -26,21 +27,45 @@ const edgeTypes: EdgeTypes = {
   dependency: DependencyEdge,
 };
 
+function matchesFilter(node: GraphNodeData, filter: FilterState): boolean {
+  if (!filter.enabledClassifications.has(node.classification as ModuleClassification)) {
+    return false;
+  }
+  if (filter.searchQuery) {
+    const q = filter.searchQuery.toLowerCase();
+    return (
+      node.moduleName.toLowerCase().includes(q) ||
+      node.relativePath.toLowerCase().includes(q) ||
+      node.exports.some((e) => e.name.toLowerCase().includes(q))
+    );
+  }
+  return true;
+}
+
 export function GraphCanvas() {
   const state = useExtensionHost();
   const [selectedNode, setSelectedNode] = useState<GraphNodeData | null>(null);
+  const [filter, setFilter] = useState<FilterState>(DEFAULT_FILTER);
 
   const flowNodes: Node[] = useMemo(() => {
     return state.nodes.map((n) => {
       const pos = state.positions.get(n.id);
+      const match = matchesFilter(n, filter);
       return {
         id: n.id,
         type: "module",
         position: pos ? { x: pos.x, y: pos.y } : { x: 0, y: 0 },
         data: n,
+        style: { opacity: match ? 1 : 0.15 },
       };
     });
-  }, [state.nodes, state.positions]);
+  }, [state.nodes, state.positions, filter]);
+
+  const matchedNodeIds = useMemo(() => {
+    return new Set(
+      state.nodes.filter((n) => matchesFilter(n, filter)).map((n) => n.id)
+    );
+  }, [state.nodes, filter]);
 
   const flowEdges: Edge[] = useMemo(() => {
     return state.edges.map((e) => ({
@@ -49,8 +74,11 @@ export function GraphCanvas() {
       source: e.source,
       target: e.target,
       data: { importType: e.importType, symbols: e.symbols },
+      style: {
+        opacity: matchedNodeIds.has(e.source) && matchedNodeIds.has(e.target) ? 1 : 0.1,
+      },
     }));
-  }, [state.edges]);
+  }, [state.edges, matchedNodeIds]);
 
   const handleNodeClick: OnNodeClick = useCallback((_event, node) => {
     setSelectedNode(node.data as unknown as GraphNodeData);
@@ -62,6 +90,7 @@ export function GraphCanvas() {
 
   return (
     <div style={{ width: "100vw", height: "100vh", position: "relative" }}>
+      <FilterPanel filter={filter} onFilterChange={setFilter} />
       <ReactFlow
         nodes={flowNodes}
         edges={flowEdges}
