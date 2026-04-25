@@ -30,6 +30,7 @@ export function openExplorer(context: vscode.ExtensionContext): void {
   const config = vscode.workspace.getConfiguration("tsDeepExplorer");
   const exclude = config.get<string[]>("exclude", []);
   const layoutDir = config.get<"TB" | "LR">("layout", "LR");
+  const autoRefresh = config.get<boolean>("autoRefresh", true);
 
   // Run initial analysis
   statusBar.setScanning();
@@ -73,7 +74,9 @@ export function openExplorer(context: vscode.ExtensionContext): void {
     };
 
     const watcher = new FileWatcher({ projectRoot, exclude }, callbacks, layoutDir);
-    watcher.start();
+    if (autoRefresh) {
+      watcher.start();
+    }
     context.subscriptions.push({ dispose: () => watcher.stop() });
   } catch (err) {
     statusBar.setError(String(err));
