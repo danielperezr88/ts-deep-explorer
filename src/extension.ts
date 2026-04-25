@@ -1,16 +1,26 @@
 import * as vscode from "vscode";
+import { openExplorer } from "./commands/openExplorer";
+import { analyzeFile } from "./commands/analyzeFile";
+import { showCycles } from "./commands/showCycles";
+import { exportGraph } from "./commands/exportGraph";
 
 export function activate(context: vscode.ExtensionContext): void {
   console.log("TS Deep Explorer activated");
 
-  const helloCmd = vscode.commands.registerCommand(
-    "tsDeepExplorer.helloWorld",
-    () => {
-      vscode.window.showInformationMessage("TS Deep Explorer says hello!");
-    }
+  context.subscriptions.push(
+    vscode.commands.registerCommand("tsDeepExplorer.openExplorer", () =>
+      openExplorer(context)
+    ),
+    vscode.commands.registerCommand("tsDeepExplorer.analyzeFile", () =>
+      analyzeFile()
+    ),
+    vscode.commands.registerCommand("tsDeepExplorer.showCycles", () =>
+      showCycles(context)
+    ),
+    vscode.commands.registerCommand("tsDeepExplorer.exportGraph", () =>
+      exportGraph()
+    )
   );
-
-  context.subscriptions.push(helloCmd);
 }
 
 export function deactivate(): void {
