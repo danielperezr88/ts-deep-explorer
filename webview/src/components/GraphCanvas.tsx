@@ -9,6 +9,7 @@ import {
   type NodeTypes,
   type EdgeTypes,
   type OnNodeClick,
+  type OnNodeDoubleClick,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { ModuleNode } from "./nodes/ModuleNode";
@@ -84,6 +85,11 @@ export function GraphCanvas() {
     setSelectedNode(node.data as unknown as GraphNodeData);
   }, []);
 
+  const handleNodeDoubleClick: OnNodeDoubleClick = useCallback((_event, node) => {
+    const data = node.data as unknown as GraphNodeData;
+    postMessageToHost({ type: "navigateTo", filePath: data.relativePath });
+  }, []);
+
   const handleNavigate = useCallback((filePath: string, symbolName?: string) => {
     postMessageToHost({ type: "navigateTo", filePath, symbolName });
   }, []);
@@ -97,6 +103,7 @@ export function GraphCanvas() {
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         onNodeClick={handleNodeClick}
+        onNodeDoubleClick={handleNodeDoubleClick}
         fitView
         minZoom={0.1}
         maxZoom={2}

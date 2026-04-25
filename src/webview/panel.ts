@@ -2,8 +2,6 @@ import * as vscode from "vscode";
 import { MessageBridge } from "./messaging";
 import type { WebviewToHostMessage } from "../../shared/protocol";
 
-let currentPanel: ExplorerPanel | undefined;
-
 export class ExplorerPanel {
   public static currentPanel: ExplorerPanel | undefined;
   public static readonly viewType = "tsDeepExplorer";
@@ -49,7 +47,51 @@ export class ExplorerPanel {
 
     this.panel.webview.html = this.getHtmlForWebview();
 
+    this.registerDefaultHandlers();
     this.panel.onDidDispose(() => this.dispose(), null, this.disposables);
+  }
+
+  /**
+   * Register default message handlers for navigation and other built-in actions.
+   */
+  private registerDefaultHandlers(): void {
+    this.onMessage((message: WebviewToHostMessage) => {
+      switch (message.type) {
+        case "navigateTo":
+          this.handleNavigateTo(message.filePath, message.symbolName);
+          break;
+        case "requestCycles":
+          // Will be wired up when cycle detection is integrated
+          break;
+        case "exportGraph":
+          // Will be wired up when export is integrated
+          break;
+        case "ready":
+          // Webview is ready — handled by the analysis orchestrator
+          break;
+      }
+    });
+  }
+
+  /**
+   * Handle navigateTo message from webview: open file in editor.
+   */
+  private async handleNavigateTo(filePath: string, _symbolName?: string): Promise<void> {
+    const workspaceFolders = vscode.workspace.workspaceFolders;
+    if (!workspaceFolders || workspaceFolders.length === 0) return;
+
+    const rootUri = workspaceFolders[0].uri;
+    const fileUri = vscode.Uri.joinPath(rootUri, filePath);
+
+    try {
+      const doc = await vscode.workspace.openTextDocument(fileUri);
+      await vscode.window.showTextDocument(doc, {
+        viewColumn: vscode.ViewColumn.One,
+        preserveFocus: false,
+      });
+    } catch {
+      vscode.window.showErrorMessage(`Could not open ${filePath}`);
+    }
   }
 
   /**
