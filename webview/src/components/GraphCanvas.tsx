@@ -20,7 +20,8 @@ import { FilterPanel, DEFAULT_FILTER, type FilterState } from "./panels/FilterPa
 import { useExtensionHost } from "../hooks/useExtensionHost";
 import { postMessageToHost } from "../lib/vscode-api";
 import { toMermaid, toJSON } from "../lib/export-utils";
-import type { GraphNodeData, ModuleClassification } from "../../../shared/protocol";
+import { computeClientLayout } from "../lib/layout";
+import type { GraphNodeData, ModuleClassification, LayoutAlgorithm } from "../../../shared/protocol";
 
 const nodeTypes: NodeTypes = {
   module: ModuleNode,
@@ -52,6 +53,7 @@ export function GraphCanvas() {
   const [filter, setFilter] = useState<FilterState>(DEFAULT_FILTER);
   const [collapsedDirs, setCollapsedDirs] = useState<Set<string>>(new Set());
   const [showCycles, setShowCycles] = useState(false);
+  const [layoutAlgorithm, setLayoutAlgorithm] = useState<LayoutAlgorithm>("dagre");
 
   // Compute cycle edge set for highlighting
   const cycleEdgeKeys = useMemo(() => {
@@ -64,6 +66,13 @@ export function GraphCanvas() {
     }
     return keys;
   }, [showCycles, state.cycles]);
+
+  // Recompute positions when layout algorithm changes (force/radial are client-side)
+  const effectivePositions = useMemo(() => {
+    if (layoutAlgorithm === "dagre") return state.positions;
+    if (state.nodes.length === 0) return state.positions;
+    return computeClientLayout(state.nodes, state.edges, layoutAlgorithm);
+  }, [state.positions, state.nodes, state.edges, layoutAlgorithm]);
 
   const toggleDirectory = useCallback((dir: string) => {
     setCollapsedDirs((prev) => {
@@ -97,7 +106,7 @@ export function GraphCanvas() {
       for (const n of dirNodes) {
         classCounts[n.classification] = (classCounts[n.classification] || 0) + 1;
         totalExports += n.exports.length;
-        const pos = state.positions.get(n.id);
+        const pos = effectivePositions.get(n.id);
         if (pos) {
           sumX += pos.x;
           sumY += pos.y;
@@ -125,7 +134,7 @@ export function GraphCanvas() {
     const individualNodes = state.nodes
       .filter((n) => !collapsedNodeIds.has(n.id))
       .map((n) => {
-        const pos = state.positions.get(n.id);
+        const pos = effectivePositions.get(n.id);
         const match = matchesFilter(n, filter);
         return {
           id: n.id,
@@ -137,7 +146,7 @@ export function GraphCanvas() {
       });
 
     return [...individualNodes, ...groupNodes];
-  }, [state.nodes, state.positions, filter, collapsedDirs]);
+  }, [state.nodes, effectivePositions, filter, collapsedDirs]);
 
   const matchedNodeIds = useMemo(() => {
     return new Set(
@@ -255,6 +264,30 @@ export function GraphCanvas() {
         >
           {showCycles ? "Hide Cycles" : `${state.cycles.length} Cycle${state.cycles.length !== 1 ? "s" : ""}`}
         </button>
+      )}
+      {state.nodes.length > 0 && (
+        <select
+          value={layoutAlgorithm}
+          onChange={(e) => setLayoutAlgorithm(e.target.value as LayoutAlgorithm)}
+          style={{
+            position: "absolute",
+            top: "8px",
+            right: state.nodes.length > 0 && selectedNode ? "480px" : "112px",
+            zIndex: 5,
+            background: "var(--vscode-input-background, #3c3c3c)",
+            border: "1px solid var(--vscode-input-border, #555)",
+            color: "var(--vscode-input-foreground, #ccc)",
+            padding: "4px 8px",
+            borderRadius: "3px",
+            fontSize: "11px",
+            fontFamily: "var(--vscode-editor-font-family, monospace)",
+            cursor: "pointer",
+          }}
+        >
+          <option value="dagre">Hierarchical</option>
+          <option value="force">Force-directed</option>
+          <option value="radial">Radial</option>
+        </select>
       )}
       {state.nodes.length > 0 && (
         <div

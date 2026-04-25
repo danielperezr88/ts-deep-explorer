@@ -62,9 +62,12 @@ describe("Protocol types", () => {
       { type: "exportGraph", format: "svg" },
       { type: "exportGraph", format: "mermaid" },
       { type: "exportGraph", format: "json" },
+      { type: "changeLayout", algorithm: "dagre" },
+      { type: "changeLayout", algorithm: "force" },
+      { type: "changeLayout", algorithm: "radial" },
       { type: "ready" },
     ];
-    expect(messages).toHaveLength(8);
+    expect(messages).toHaveLength(11);
     expect(messages.every((m) => "type" in m)).toBe(true);
   });
 

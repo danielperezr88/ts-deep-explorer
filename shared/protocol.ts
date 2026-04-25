@@ -68,8 +68,11 @@ export type HostToWebviewMessage =
       cycles: string[][];
     };
 
+export type LayoutAlgorithm = "dagre" | "force" | "radial";
+
 export type WebviewToHostMessage =
   | { type: "navigateTo"; filePath: string; symbolName?: string }
   | { type: "requestCycles" }
   | { type: "exportGraph"; format: "png" | "svg" | "mermaid" | "json" }
+  | { type: "changeLayout"; algorithm: LayoutAlgorithm }
   | { type: "ready" };

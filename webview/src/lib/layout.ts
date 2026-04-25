@@ -1,17 +1,4 @@
-import dagre from "@dagrejs/dagre";
-import type { GraphNodeData, GraphEdgeData } from "../../shared/protocol";
-
-export type LayoutDirection = "TB" | "LR";
-export type LayoutAlgorithm = "dagre" | "force" | "radial";
-
-export interface LayoutOptions {
-  algorithm?: LayoutAlgorithm;
-  direction?: LayoutDirection;
-  nodeWidth?: number;
-  nodeHeight?: number;
-  rankSpacing?: number;
-  nodeSpacing?: number;
-}
+import type { GraphNodeData, GraphEdgeData, LayoutAlgorithm } from "../../../shared/protocol";
 
 export interface LayoutPosition {
   id: string;
@@ -19,88 +6,40 @@ export interface LayoutPosition {
   y: number;
 }
 
-const DEFAULT_OPTIONS: Required<LayoutOptions> = {
-  algorithm: "dagre",
-  direction: "LR",
-  nodeWidth: 200,
-  nodeHeight: 80,
-  rankSpacing: 100,
-  nodeSpacing: 50,
-};
-
 /**
- * Compute graph layout using the specified algorithm.
+ * Client-side layout computation (force-directed and radial).
+ * Dagre layout is computed on the extension host side.
  */
-export function computeLayout(
+export function computeClientLayout(
   nodes: GraphNodeData[],
   edges: GraphEdgeData[],
-  options?: LayoutOptions
-): LayoutPosition[] {
-  const opts = { ...DEFAULT_OPTIONS, ...options };
+  algorithm: LayoutAlgorithm,
+  spacing = 100
+): Map<string, LayoutPosition> {
+  if (nodes.length === 0) return new Map();
 
-  switch (opts.algorithm) {
+  switch (algorithm) {
     case "force":
-      return computeForceLayout(nodes, edges, opts);
+      return computeForceLayout(nodes, edges, spacing);
     case "radial":
-      return computeRadialLayout(nodes, edges, opts);
-    case "dagre":
+      return computeRadialLayout(nodes, edges, spacing);
     default:
-      return computeDagreLayout(nodes, edges, opts);
+      return new Map();
   }
 }
 
-function computeDagreLayout(
-  nodes: GraphNodeData[],
-  edges: GraphEdgeData[],
-  opts: Required<LayoutOptions>
-): LayoutPosition[] {
-  const g = new dagre.graphlib.Graph();
-  g.setDefaultEdgeLabel(() => ({}));
-  g.setGraph({
-    rankdir: opts.direction,
-    ranksep: opts.rankSpacing,
-    nodesep: opts.nodeSpacing,
-  });
-
-  for (const node of nodes) {
-    g.setNode(node.id, { width: opts.nodeWidth, height: opts.nodeHeight });
-  }
-
-  for (const edge of edges) {
-    g.setEdge(edge.source, edge.target);
-  }
-
-  dagre.layout(g);
-
-  return nodes.map((node) => {
-    const pos = g.node(node.id);
-    return {
-      id: node.id,
-      x: pos.x - opts.nodeWidth / 2,
-      y: pos.y - opts.nodeHeight / 2,
-    };
-  });
-}
-
-/**
- * Simple force-directed layout using iterative spring-embedding.
- * No external dependency required.
- */
 function computeForceLayout(
   nodes: GraphNodeData[],
   edges: GraphEdgeData[],
-  opts: Required<LayoutOptions>
-): LayoutPosition[] {
-  if (nodes.length === 0) return [];
-
+  spacing: number
+): Map<string, LayoutPosition> {
   const iterations = 150;
-  const idealLength = opts.rankSpacing;
+  const idealLength = spacing;
   const repulsion = idealLength * idealLength * 2;
   const attraction = 0.01;
   const damping = 0.9;
   const epsilon = 0.001;
 
-  // Initialize positions in a circle
   const positions = new Map<string, { x: number; y: number; vx: number; vy: number }>();
   const radius = idealLength * Math.sqrt(nodes.length);
 
@@ -114,27 +53,15 @@ function computeForceLayout(
     });
   });
 
-  // Build adjacency for faster lookups
-  const edgeSet = new Set(edges.map((e) => `${e.source}->${e.target}`));
-  const neighbors = new Map<string, Set<string>>();
-  for (const node of nodes) {
-    neighbors.set(node.id, new Set());
-  }
-  for (const edge of edges) {
-    neighbors.get(edge.source)?.add(edge.target);
-    neighbors.get(edge.target)?.add(edge.source);
-  }
-
   for (let iter = 0; iter < iterations; iter++) {
     const temperature = 1 - iter / iterations;
 
-    // Repulsion between all pairs
     for (let i = 0; i < nodes.length; i++) {
       for (let j = i + 1; j < nodes.length; j++) {
         const a = positions.get(nodes[i].id)!;
         const b = positions.get(nodes[j].id)!;
-        let dx = a.x - b.x;
-        let dy = a.y - b.y;
+        const dx = a.x - b.x;
+        const dy = a.y - b.y;
         const dist = Math.sqrt(dx * dx + dy * dy) || epsilon;
         const force = repulsion / (dist * dist);
         const fx = (dx / dist) * force * temperature;
@@ -146,7 +73,6 @@ function computeForceLayout(
       }
     }
 
-    // Attraction along edges
     for (const edge of edges) {
       const a = positions.get(edge.source);
       const b = positions.get(edge.target);
@@ -163,7 +89,6 @@ function computeForceLayout(
       b.vy -= fy;
     }
 
-    // Apply velocities
     for (const node of nodes) {
       const p = positions.get(node.id)!;
       p.vx *= damping;
@@ -173,24 +98,19 @@ function computeForceLayout(
     }
   }
 
-  return nodes.map((node) => {
+  const result = new Map<string, LayoutPosition>();
+  for (const node of nodes) {
     const p = positions.get(node.id)!;
-    return { id: node.id, x: p.x, y: p.y };
-  });
+    result.set(node.id, { id: node.id, x: p.x, y: p.y });
+  }
+  return result;
 }
 
-/**
- * Radial layout: place nodes in concentric circles based on
- * their distance from the entry nodes (BFS layering).
- */
 function computeRadialLayout(
   nodes: GraphNodeData[],
   edges: GraphEdgeData[],
-  opts: Required<LayoutOptions>
-): LayoutPosition[] {
-  if (nodes.length === 0) return [];
-
-  // Build adjacency
+  spacing: number
+): Map<string, LayoutPosition> {
   const children = new Map<string, string[]>();
   const nodeSet = new Set(nodes.map((n) => n.id));
   for (const node of nodes) {
@@ -202,12 +122,10 @@ function computeRadialLayout(
     }
   }
 
-  // Find entry nodes (no incoming edges)
   const hasIncoming = new Set(edges.map((e) => e.target));
   const entries = nodes.filter((n) => !hasIncoming.has(n.id));
   const roots = entries.length > 0 ? entries.map((e) => e.id) : [nodes[0].id];
 
-  // BFS to assign rings
   const ring = new Map<string, number>();
   const queue = [...roots];
   const visited = new Set<string>();
@@ -228,7 +146,6 @@ function computeRadialLayout(
     }
   }
 
-  // Assign unvisited nodes to outermost ring + 1
   let maxRing = 0;
   for (const r of ring.values()) {
     if (r > maxRing) maxRing = r;
@@ -240,30 +157,21 @@ function computeRadialLayout(
     }
   }
 
-  // Group by ring and place in circles
   const ringGroups = new Map<number, string[]>();
   for (const [id, r] of ring) {
     if (!ringGroups.has(r)) ringGroups.set(r, []);
     ringGroups.get(r)!.push(id);
   }
 
-  const spacing = opts.rankSpacing;
-  const positions = new Map<string, { x: number; y: number }>();
-
+  const positions = new Map<string, LayoutPosition>();
   for (const [r, ids] of ringGroups) {
-    const radius = r * spacing;
+    const r2 = r * spacing;
     const angleStep = (2 * Math.PI) / ids.length;
     for (let i = 0; i < ids.length; i++) {
       const angle = angleStep * i;
-      positions.set(ids[i], {
-        x: radius * Math.cos(angle),
-        y: radius * Math.sin(angle),
-      });
+      positions.set(ids[i], { id: ids[i], x: r2 * Math.cos(angle), y: r2 * Math.sin(angle) });
     }
   }
 
-  return nodes.map((node) => {
-    const p = positions.get(node.id) ?? { x: 0, y: 0 };
-    return { id: node.id, x: p.x, y: p.y };
-  });
+  return positions;
 }

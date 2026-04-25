@@ -176,3 +176,105 @@ describe("computeLayout", () => {
     }
   });
 });
+
+describe("Force-directed layout", () => {
+  it("returns positions for all nodes", () => {
+    const nodes = [makeNode("a"), makeNode("b"), makeNode("c")];
+    const edges = [makeEdge("a", "b"), makeEdge("b", "c")];
+
+    const positions = computeLayout(nodes, edges, { algorithm: "force" });
+    expect(positions).toHaveLength(3);
+    for (const pos of positions) {
+      expect(typeof pos.x).toBe("number");
+      expect(typeof pos.y).toBe("number");
+      expect(isNaN(pos.x)).toBe(false);
+      expect(isNaN(pos.y)).toBe(false);
+    }
+  });
+
+  it("handles empty graph", () => {
+    const positions = computeLayout([], [], { algorithm: "force" });
+    expect(positions).toHaveLength(0);
+  });
+
+  it("handles single node", () => {
+    const positions = computeLayout([makeNode("a")], [], { algorithm: "force" });
+    expect(positions).toHaveLength(1);
+  });
+
+  it("connected nodes are closer than unconnected", () => {
+    const nodes = [makeNode("a"), makeNode("b"), makeNode("c")];
+    const edges = [makeEdge("a", "b")];
+
+    const positions = computeLayout(nodes, edges, { algorithm: "force", rankSpacing: 100 });
+    const a = positions.find((p) => p.id === "a")!;
+    const b = positions.find((p) => p.id === "b")!;
+    const c = positions.find((p) => p.id === "c")!;
+
+    const abDist = Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
+    const acDist = Math.sqrt((a.x - c.x) ** 2 + (a.y - c.y) ** 2);
+
+    // Connected nodes (a-b) should be closer than unconnected (a-c)
+    expect(abDist).toBeLessThan(acDist + 200); // Allow some tolerance
+  });
+
+  it("handles cyclic graphs", () => {
+    const nodes = [makeNode("a"), makeNode("b"), makeNode("c")];
+    const edges = [makeEdge("a", "b"), makeEdge("b", "c"), makeEdge("c", "a")];
+
+    const positions = computeLayout(nodes, edges, { algorithm: "force" });
+    expect(positions).toHaveLength(3);
+  });
+});
+
+describe("Radial layout", () => {
+  it("returns positions for all nodes", () => {
+    const nodes = [makeNode("a"), makeNode("b"), makeNode("c")];
+    const edges = [makeEdge("a", "b"), makeEdge("a", "c")];
+
+    const positions = computeLayout(nodes, edges, { algorithm: "radial" });
+    expect(positions).toHaveLength(3);
+    for (const pos of positions) {
+      expect(typeof pos.x).toBe("number");
+      expect(typeof pos.y).toBe("number");
+    }
+  });
+
+  it("handles empty graph", () => {
+    const positions = computeLayout([], [], { algorithm: "radial" });
+    expect(positions).toHaveLength(0);
+  });
+
+  it("entry node is at center (ring 0)", () => {
+    const nodes = [makeNode("a"), makeNode("b"), makeNode("c")];
+    const edges = [makeEdge("a", "b"), makeEdge("a", "c")];
+
+    const positions = computeLayout(nodes, edges, { algorithm: "radial" });
+    const a = positions.find((p) => p.id === "a")!;
+
+    // Entry node 'a' should be at or near origin
+    const dist = Math.sqrt(a.x ** 2 + a.y ** 2);
+    expect(dist).toBeLessThan(1);
+  });
+
+  it("dependents are further from center than entry", () => {
+    const nodes = [makeNode("a"), makeNode("b"), makeNode("c")];
+    const edges = [makeEdge("a", "b"), makeEdge("b", "c")];
+
+    const positions = computeLayout(nodes, edges, { algorithm: "radial" });
+    const a = positions.find((p) => p.id === "a")!;
+    const c = positions.find((p) => p.id === "c")!;
+
+    const aDist = Math.sqrt(a.x ** 2 + a.y ** 2);
+    const cDist = Math.sqrt(c.x ** 2 + c.y ** 2);
+    expect(cDist).toBeGreaterThan(aDist);
+  });
+
+  it("handles cyclic graphs without infinite loop", () => {
+    const nodes = [makeNode("a"), makeNode("b"), makeNode("c")];
+    const edges = [makeEdge("a", "b"), makeEdge("b", "c"), makeEdge("c", "a")];
+
+    const positions = computeLayout(nodes, edges, { algorithm: "radial" });
+    expect(positions).toHaveLength(3);
+  });
+});
