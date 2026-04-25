@@ -44,8 +44,21 @@
       {
         "command": "tsDeepExplorer.exportGraph",
         "title": "TS Deep Explorer: Export Graph"
+      },
+      {
+        "command": "tsDeepExplorer.showInGraph",
+        "title": "TS Deep Explorer: Show in Dependency Graph"
       }
     ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "tsDeepExplorer.showInGraph",
+          "when": "resourceLangId == typescript || resourceLangId == typescriptreact",
+          "group": "navigation@100"
+        }
+      ]
+    },
     "configuration": {
       "title": "TS Deep Explorer",
       "properties": {

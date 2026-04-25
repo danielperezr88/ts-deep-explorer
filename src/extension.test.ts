@@ -25,6 +25,9 @@ vi.mock("./commands/showCycles", () => ({
 vi.mock("./commands/exportGraph", () => ({
   exportGraph: vi.fn(),
 }));
+vi.mock("./commands/showInGraph", () => ({
+  showInGraph: vi.fn(),
+}));
 
 import { activate, deactivate } from "./extension";
 
@@ -41,15 +44,16 @@ describe("extension scaffold", () => {
 
     activate(mockContext);
 
-    // Check that 4 commands were registered in this activation call
-    const callsInThisActivation = mockRegisterCommand.mock.calls.slice(-4);
-    expect(callsInThisActivation).toHaveLength(4);
+    // Check that 5 commands were registered in this activation call
+    const callsInThisActivation = mockRegisterCommand.mock.calls.slice(-5);
+    expect(callsInThisActivation).toHaveLength(5);
 
     const commandIds = callsInThisActivation.map((c) => c[0]);
     expect(commandIds).toContain("tsDeepExplorer.openExplorer");
     expect(commandIds).toContain("tsDeepExplorer.analyzeFile");
     expect(commandIds).toContain("tsDeepExplorer.showCycles");
     expect(commandIds).toContain("tsDeepExplorer.exportGraph");
+    expect(commandIds).toContain("tsDeepExplorer.showInGraph");
   });
 
   it("deactivate is a no-op function", () => {
