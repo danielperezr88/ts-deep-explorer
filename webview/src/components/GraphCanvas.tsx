@@ -19,6 +19,7 @@ import { DocPanel } from "./panels/DocPanel";
 import { FilterPanel, DEFAULT_FILTER, type FilterState } from "./panels/FilterPanel";
 import { useExtensionHost } from "../hooks/useExtensionHost";
 import { postMessageToHost } from "../lib/vscode-api";
+import { toMermaid, toJSON } from "../lib/export-utils";
 import type { GraphNodeData, ModuleClassification } from "../../../shared/protocol";
 
 const nodeTypes: NodeTypes = {
@@ -254,6 +255,57 @@ export function GraphCanvas() {
         >
           {showCycles ? "Hide Cycles" : `${state.cycles.length} Cycle${state.cycles.length !== 1 ? "s" : ""}`}
         </button>
+      )}
+      {state.nodes.length > 0 && (
+        <div
+          style={{
+            position: "absolute",
+            top: "8px",
+            right: state.nodes.length > 0 && selectedNode ? "376px" : "8px",
+            zIndex: 5,
+            display: "flex",
+            gap: "4px",
+          }}
+        >
+          <button
+            onClick={() => {
+              const mermaid = toMermaid(state.nodes, state.edges);
+              postMessageToHost({ type: "exportGraph", format: "mermaid" });
+              navigator.clipboard.writeText(mermaid);
+            }}
+            style={{
+              background: "var(--vscode-editor-background, #1e1e1e)",
+              border: "1px solid var(--vscode-editorWidget-border, #444)",
+              color: "var(--vscode-editor-foreground, #ccc)",
+              padding: "4px 8px",
+              borderRadius: "3px",
+              cursor: "pointer",
+              fontSize: "11px",
+              fontFamily: "var(--vscode-editor-font-family, monospace)",
+            }}
+          >
+            Mermaid
+          </button>
+          <button
+            onClick={() => {
+              const json = toJSON(state.nodes, state.edges);
+              postMessageToHost({ type: "exportGraph", format: "json" });
+              navigator.clipboard.writeText(json);
+            }}
+            style={{
+              background: "var(--vscode-editor-background, #1e1e1e)",
+              border: "1px solid var(--vscode-editorWidget-border, #444)",
+              color: "var(--vscode-editor-foreground, #ccc)",
+              padding: "4px 8px",
+              borderRadius: "3px",
+              cursor: "pointer",
+              fontSize: "11px",
+              fontFamily: "var(--vscode-editor-font-family, monospace)",
+            }}
+          >
+            JSON
+          </button>
+        </div>
       )}
       <ReactFlow
         nodes={flowNodes}
