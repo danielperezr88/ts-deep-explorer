@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState, useCallback } from "react";
 import {
   ReactFlow,
   Background,
@@ -8,11 +8,15 @@ import {
   type Edge,
   type NodeTypes,
   type EdgeTypes,
+  type OnNodeClick,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { ModuleNode } from "./nodes/ModuleNode";
 import { DependencyEdge } from "./edges/DependencyEdge";
+import { DocPanel } from "./panels/DocPanel";
 import { useExtensionHost } from "../hooks/useExtensionHost";
+import { postMessageToHost } from "../lib/vscode-api";
+import type { GraphNodeData } from "../../../shared/protocol";
 
 const nodeTypes: NodeTypes = {
   module: ModuleNode,
@@ -24,6 +28,7 @@ const edgeTypes: EdgeTypes = {
 
 export function GraphCanvas() {
   const state = useExtensionHost();
+  const [selectedNode, setSelectedNode] = useState<GraphNodeData | null>(null);
 
   const flowNodes: Node[] = useMemo(() => {
     return state.nodes.map((n) => {
@@ -47,13 +52,22 @@ export function GraphCanvas() {
     }));
   }, [state.edges]);
 
+  const handleNodeClick: OnNodeClick = useCallback((_event, node) => {
+    setSelectedNode(node.data as unknown as GraphNodeData);
+  }, []);
+
+  const handleNavigate = useCallback((filePath: string, symbolName?: string) => {
+    postMessageToHost({ type: "navigateTo", filePath, symbolName });
+  }, []);
+
   return (
-    <div style={{ width: "100vw", height: "100vh" }}>
+    <div style={{ width: "100vw", height: "100vh", position: "relative" }}>
       <ReactFlow
         nodes={flowNodes}
         edges={flowEdges}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
+        onNodeClick={handleNodeClick}
         fitView
         minZoom={0.1}
         maxZoom={2}
@@ -121,6 +135,13 @@ export function GraphCanvas() {
           Connecting to extension host...
         </div>
       )}
+      <DocPanel
+        node={selectedNode}
+        edges={state.edges}
+        allNodes={state.nodes}
+        onClose={() => setSelectedNode(null)}
+        onNavigate={handleNavigate}
+      />
     </div>
   );
 }
